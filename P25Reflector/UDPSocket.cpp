@@ -161,6 +161,25 @@ bool CUDPSocket::isNone(const sockaddr_storage& addr)
 	return ((addr.ss_family == AF_INET) && (in->sin_addr.s_addr == htonl(INADDR_NONE)));
 }
 
+// 127.0.0.0/8, ::1 or ::ffff:127.x, a link from this host
+bool CUDPSocket::isLoopback(const sockaddr_storage& addr)
+{
+	if (addr.ss_family == AF_INET) {
+		const struct sockaddr_in* in4 = (const struct sockaddr_in*)&addr;
+		return (ntohl(in4->sin_addr.s_addr) >> 24) == 127U;
+	}
+
+	if (addr.ss_family == AF_INET6) {
+		static const unsigned char LOOPBACK[16U] = {0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 1U};
+		static const unsigned char MAPPED[12U]   = {0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0xFFU, 0xFFU};
+
+		const unsigned char* a = ((const struct sockaddr_in6*)&addr)->sin6_addr.s6_addr;
+		return ::memcmp(a, LOOPBACK, 16U) == 0 || (::memcmp(a, MAPPED, 12U) == 0 && a[12U] == 127U);
+	}
+
+	return false;
+}
+
 char* CUDPSocket::display(const sockaddr_storage& addr, char* buffer, unsigned int length)
 {
 	assert(buffer != NULL);
@@ -170,14 +189,14 @@ char* CUDPSocket::display(const sockaddr_storage& addr, char* buffer, unsigned i
 		case AF_INET: {
 			struct sockaddr_in* in4 = (struct sockaddr_in*)&addr;
 			::inet_ntop(AF_INET, &in4->sin_addr, buffer, length);
-			::sprintf(buffer + ::strlen(buffer), ":%u", in4->sin_port);
+			::sprintf(buffer + ::strlen(buffer), ":%u", ntohs(in4->sin_port));
 		}
 		break;
 
 	case AF_INET6: {
 			struct sockaddr_in6* in6 = (struct sockaddr_in6*)&addr;
 			::inet_ntop(AF_INET6, &in6->sin6_addr, buffer, length);
-			::sprintf(buffer + ::strlen(buffer), ":%u", in6->sin6_port);
+			::sprintf(buffer + ::strlen(buffer), ":%u", ntohs(in6->sin6_port));
 		}
 		break;
 
